@@ -239,9 +239,9 @@ proc list(enabled = false, disabled = false, short = false) =
         styledEcho fgRed, "[ ] ", fgDefault, styleBright, info.name,
           resetStyle, "  ", styleDim, id, " ", $info.timestamp
 
-proc info(query: seq[string]) =
+proc query(addon: seq[string]) =
   ## List addon information
-  if query.len != 1:
+  if addon.len != 1:
     stderr.writeLine "Provide exactly one info query."
     quit 1
 
@@ -249,7 +249,7 @@ proc info(query: seq[string]) =
     dataDir = initDataDir("tam")
     db = initDb dataDir
     installed = db.getInstalledAddons
-    id = query[0]
+    id = addon[0]
 
   if id in installed:
     let addon = installed[id]
@@ -303,7 +303,7 @@ proc tam =
     [list, help = {"enabled": "display only enabled addons",
                    "disabled": "display only disabled addons",
                    "short": "display only id of an addon"}],
-    [info],
+    [query],
     [search]
   )
 
