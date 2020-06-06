@@ -1,4 +1,4 @@
-import os, httpclient, htmlparser, xmltree, strutils, times, tables, uri, terminal
+import os, httpclient, htmlparser, xmltree, strutils, times, tables, uri, terminal, asyncdispatch, asyncfile
 import tiny_sqlite, cligen, nimquery
 
 type
@@ -18,8 +18,8 @@ const
 func idToFilename(id: string): string = "tome-" & id & ".teaa"
 func idToUrl(id: string): string = addonsUrl & id.encodeUrl
 
-proc getInfoHtml(http: HttpClient, id: string): XmlNode =
-  http.getContent(id.idToUrl).parseHtml
+proc getInfoHtml(http: AsyncHttpClient, id: string): Future[XmlNode] {.async.} =
+  result = http.getContent(id.idToUrl).await.parseHtml
 
 func isValidAddon(n: XmlNode): bool =
   not n[1][1][7][0].text.startsWith("T-Engine4 Games | Tales of Maj")
@@ -33,6 +33,53 @@ proc getTimestamp(n: XmlNode, q: Query): int64 =
 
 proc getLink(n: XmlNode, q: Query): string =
   tomeUrl & q.exec(n, single = true)[0].attr("href")
+
+proc performInstall(id: string, queryTime, queryLink: Query,
+  dataDir, tomeDir: string, db: DbConn, disabled: bool) {.async.} =
+  let
+    http = newAsyncHttpClient()
+    info = await http.getInfoHtml id
+  if info.isValidAddon:
+    let
+      name = info.getName
+      timestamp = info.getTimestamp(queryTime)
+      link = info.getLink(queryLink)
+      data = await http.getContent link
+      filename = id.idToUrl
+      src = dataDir / filename
+      dst = tomeDir / filename
+      srcFile = openAsync(src, fmWrite)
+    await srcFile.write data
+    if not disabled:
+      when defined(windows):
+        copyFile src, dest
+      else:
+        createSymlink src, dst
+    db.transaction:
+      db.exec "INSERT INTO Addons(id, name, timestamp, enabled) VALUES(?, ?, ?, ?)",
+        id, name, timestamp, not disabled
+    echo "Installed " & id
+  else:
+    stderr.writeLine "Addon " & id & " wasn't found."
+
+proc performUpdate(id: string, addon: AddonInfo, db: DbConn,
+  queryTime, queryLink: Query, dataDir: string) {.async.} =
+  let
+    http = newAsyncHttpClient()
+    info = await http.getInfoHtml id
+    timestamp = info.getTimestamp(queryTime)
+    link = info.getLink(queryLink)
+  if timestamp > addon.timestamp:
+    let
+      data = await http.getContent link
+      filename = id.idToUrl
+      src = dataDir / filename
+      srcFile = openAsync(src, fmWrite)
+    await srcFile.write data
+    close srcFile
+    db.transaction:
+      db.exec "UPDATE Addons SET timestamp = ? WHERE id = ?", timestamp, id
+    echo "Updated " & id
 
 proc getInstalledAddons(db: DbConn): Table[string, AddonInfo] =
   for row in db.rows("SELECT id, name, timestamp, enabled FROM Addons"):
@@ -128,36 +175,18 @@ proc install(addons: seq[string], disabled = false) =
     tomeDir = getTomeDir()
     db = initDb dataDir
     installed = db.getInstalledAddons
-    http = newHttpClient()
     queryTime = parseHtmlQuery(selectorTime)
     queryLink = parseHtmlQuery(selectorLink)
+
+  var installs: seq[Future[void]]
 
   for id in addons:
     if id in installed:
       stderr.writeLine "Addon " & id & " is already installed."
     else:
-      let info = http.getInfoHtml id
-      if info.isValidAddon:
-        let
-          name = info.getName
-          link = info.getLink(queryLink)
-          timestamp = info.getTimestamp(queryTime)
-          data = http.getContent link
-          filename = "tome-" & id & ".teaa"
-          src = dataDir / filename
-          dst = tomeDir / filename
-        src.writeFile data
-        if not disabled:
-          when defined(windows):
-            copyFile src, dest
-          else:
-            createSymlink src, dst
-        db.transaction:
-          db.exec "INSERT INTO Addons(id, name, timestamp, enabled) VALUES(?, ?, ?, ?)",
-            id, name, timestamp, not disabled
-        echo "Installed " & id
-      else:
-        stderr.writeLine "Addon " & id & " wasn't found."
+      installs.add performInstall(id, queryTime, queryLink, dataDir, tomeDir, db, disabled)
+
+  waitFor all installs
 
 proc uninstall(addons: seq[string]) =
   ## Uninstall addons
@@ -196,24 +225,18 @@ proc update =
     dataDir = initDataDir("tam")
     db = initDb dataDir
     installed = db.getInstalledAddons
-    http = newHttpClient()
     queryTime = parseHtmlQuery(selectorTime)
     queryLink = parseHtmlQuery(selectorLink)
 
+  var
+    updates = newSeq[Future[void]](installed.len)
+    i = 0
+
   for id, addon in installed:
-    let
-      info = http.getInfoHtml id
-      timestamp = info.getTimestamp(queryTime)
-      link = info.getLink(queryLink)
-    if timestamp > addon.timestamp:
-      let
-        data = http.getContent link
-        filename = "tome-" & id & ".teaa"
-        src = dataDir / filename
-      src.writeFile data
-      db.transaction:
-        db.exec "UPDATE Addons SET timestamp = ? WHERE id = ?", timestamp, id
-      echo "Updated " & id
+    updates[i] = performUpdate(id, addon, db, queryTime, queryLink, dataDir)
+    inc i
+
+  waitFor all updates
 
 proc list(enabled = false, disabled = false, short = false) =
   ## List installed addons
