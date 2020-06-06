@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.1"
+version       = "0.1.2"
 author        = "SolitudeSF"
 description   = "Tales of Maj'Eyal addon manager"
 license       = "MIT"
