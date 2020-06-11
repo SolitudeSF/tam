@@ -45,7 +45,7 @@ proc performInstall(id: string, queryTime, queryLink: Query,
       timestamp = info.getTimestamp(queryTime)
       link = info.getLink(queryLink)
       data = await http.getContent link
-      filename = id.idToUrl
+      filename = id.idToFilename
       src = dataDir / filename
       dst = tomeDir / filename
       srcFile = openAsync(src, fmWrite)
@@ -72,7 +72,7 @@ proc performUpdate(id: string, addon: AddonInfo, db: DbConn,
   if timestamp > addon.timestamp:
     let
       data = await http.getContent link
-      filename = id.idToUrl
+      filename = id.idToFilename
       src = dataDir / filename
       srcFile = openAsync(src, fmWrite)
     await srcFile.write data
