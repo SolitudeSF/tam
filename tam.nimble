@@ -10,4 +10,4 @@ bin           = @["tam"]
 
 # Dependencies
 
-requires "nim >= 1.0.0", "cligen >= 1.0.0", "nimquery >= 1.2.2", "tiny_sqlite#0b7c1a59cf7b722d7df3079a90ad84a742942c71"
+requires "nim >= 1.0.0", "cligen >= 1.0.0", "nimquery >= 1.2.2", "tiny_sqlite#3fa5c0c8c14105be8a8f9f2bd93b60678d44a33f"

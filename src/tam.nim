@@ -82,7 +82,7 @@ proc performUpdate(id: string, addon: AddonInfo, db: DbConn,
     echo "Updated " & id
 
 proc getInstalledAddons(db: DbConn): Table[string, AddonInfo] =
-  for row in db.rows("SELECT id, name, timestamp, enabled FROM Addons"):
+  for row in db.iterate("SELECT id, name, timestamp, enabled FROM Addons"):
     result.add fromDbValue(row[0], string),
       AddonInfo(name: fromDbValue(row[1], string),
                 timestamp: fromDbValue(row[2], int64),
@@ -158,7 +158,7 @@ proc disable(addons: seq[string]) =
         removeFile dst
         db.transaction:
           db.exec "UPDATE Addons SET enabled = 0 WHERE id = ?", id
-        echo "Enabled " & id
+        echo "Disabled " & id
       else:
         stderr.writeLine "Addon " & id & " is already disabled."
     else:
