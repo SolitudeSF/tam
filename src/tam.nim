@@ -34,6 +34,13 @@ proc getTimestamp(n: XmlNode, q: Query): int64 =
 proc getLink(n: XmlNode, q: Query): string =
   tomeUrl & q.exec(n, single = true)[0].attr("href")
 
+proc installFile(src, dst: string) =
+  # when defined(windows):
+  when true:
+    copyFile src, dst
+  else:
+    createSymlink src, dst
+
 proc performInstall(id: string, queryTime, queryLink: Query,
   dataDir, tomeDir: string, db: DbConn, disabled: bool) {.async.} =
   let
@@ -51,10 +58,7 @@ proc performInstall(id: string, queryTime, queryLink: Query,
       srcFile = openAsync(src, fmWrite)
     await srcFile.write data
     if not disabled:
-      when defined(windows):
-        copyFile src, dest
-      else:
-        createSymlink src, dst
+      installFile src, dst
     db.transaction:
       db.exec "INSERT INTO Addons(id, name, timestamp, enabled) VALUES(?, ?, ?, ?)",
         id, name, timestamp, not disabled
@@ -129,7 +133,7 @@ proc enable(addons: seq[string]) =
           filename = id.idToFilename
           src = dataDir / filename
           dst = tomeDir / filename
-        createSymlink src, dst
+        installFile src, dst
         db.transaction:
           db.exec "UPDATE Addons SET enabled = 1 WHERE id = ?", id
         echo "Enabled " & id
