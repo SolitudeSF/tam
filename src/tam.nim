@@ -319,7 +319,7 @@ proc search(query: seq[string]) =
       )
 
 proc tam =
-  clCfg.version = "0.1.3"
+  clCfg.version = "0.1.4"
   dispatchMulti(
     ["multi", doc = "Tales of Maj'Eyal addon manager\n\n"],
     [install, help = {"disabled": "install addons in disabled state"}],
